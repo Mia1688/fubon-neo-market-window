@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.pfx
+*.p12
+settings.json
+pending_orders.json
+stock_groups.json
+log/
+dist/
+build/
+*.spec
+

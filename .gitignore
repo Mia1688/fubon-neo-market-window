@@ -9,4 +9,6 @@ log/
 dist/
 build/
 *.spec
+*.zip
+SHA256SUMS.txt
 

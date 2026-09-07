@@ -4,6 +4,10 @@
 
 完整的安裝、操作與故障排除說明請見 [繁體中文使用手冊](使用手冊.md)。
 
+## Windows 免安裝版
+
+不需 Python、不需執行 BAT。請到 [GitHub Releases](https://github.com/Mia1688/fubon-neo-market-window/releases/latest) 下載 `FubonNeoMarketWindow-v1.1.0-win64.zip`，全部解壓縮後執行 `FubonNeoMarketWindow.exe`。請保留 EXE 旁的 `_internal` 資料夾。
+
 ## 畫面配置
 
 - 左側：看盤視窗／漲停監控／ETF 折溢價導覽頁籤
@@ -30,7 +34,7 @@
 
 監控頁最下方的「程式執行訊息」會保留最近一次掃描或追單結果；掃描例外、SDK 例外與券商拒單原因都會顯示在這裡，關閉彈窗後仍可查看。
 
-## 啟動
+## 原始碼版啟動
 
 1. 安裝 Python 3.11～3.13。
 2. 第一次使用先雙擊 `install.bat` 安裝富邦 Neo SDK 與 PySide6。

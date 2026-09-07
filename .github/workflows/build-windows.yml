@@ -28,8 +28,14 @@ jobs:
           architecture: x64
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
+          Invoke-WebRequest -Uri "https://www.fbs.com.tw/TradeAPI_SDK/fubon_binary/fubon_neo-2.2.8-cp37-abi3-win_amd64.zip" -OutFile "fubon-neo-sdk.zip"
+          Expand-Archive -LiteralPath "fubon-neo-sdk.zip" -DestinationPath "fubon-neo-sdk"
+          $wheel = Get-ChildItem -LiteralPath "fubon-neo-sdk" -Filter "*.whl" -Recurse | Select-Object -First 1
+          if (-not $wheel) { throw "Fubon Neo SDK wheel was not found in the official archive." }
+          python -m pip install $wheel.FullName
           python -m pip install -r requirements.txt -r requirements-build.txt
 
       - name: Build desktop executable

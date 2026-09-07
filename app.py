@@ -264,7 +264,281 @@ class MarketWindow(QMainWindow):
         order = self._order_panel(); daily = self._daily_panel()
         self.top_splitter = QSplitter(Qt.Orientation.Horizontal); self.top_splitter.setObjectName("panelSplitter"); self.top_splitter.setChildrenCollapsible(False); self.top_splitter.addWidget(holdings); self.top_splitter.addWidget(self.tabs); self.top_splitter.setStretchFactor(0, 2); self.top_splitter.setStretchFactor(1, 3); self.top_splitter.setSizes([460, 700])
         self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal); self.bottom_splitter.setObjectName("panelSplitter"); self.bottom_splitter.setChildrenCollapsible(False); self.bottom_splitter.addWidget(order); self.bottom_splitter.addWidget(daily); self.bottom_splitter.setStretchFactor(0, 2); self.bottom_splitter.setStretchFactor(1, 3); self.bottom_splitter.setSizes([460, 700])
-        self.dashboard_splitter = QSplitter(Qt.Orientation.Vertical); self.dashboard_splitter.setObjectName("panelSplitter"); se…8733 tokens truncated…c:
+        self.dashboard_splitter = QSplitter(Qt.Orientation.Vertical); self.dashboard_splitter.setObjectName("panelSplitter"); self.dashboard_splitter.setChildrenCollapsible(False); self.dashboard_splitter.addWidget(self.top_splitter); self.dashboard_splitter.addWidget(self.bottom_splitter); self.dashboard_splitter.setStretchFactor(0, 3); self.dashboard_splitter.setStretchFactor(1, 2); self.dashboard_splitter.setSizes([480, 320]); dashboard_layout.addWidget(self.dashboard_splitter, 1)
+        bottom = QHBoxLayout(); self.footer = QLabel("資料來源：尚未連線"); self.footer.setObjectName("muted"); bottom.addWidget(self.footer); bottom.addStretch(); refresh = QPushButton("重新整理"); refresh.clicked.connect(self.refresh); bottom.addWidget(refresh)
+        dashboard_layout.addLayout(bottom); self.main_pages.addWidget(dashboard); self.main_pages.addWidget(self._limit_monitor_page()); self.main_pages.addWidget(self._monitor_page("ETF 折溢價", "比較 ETF 市價、淨值與即時折溢價", ["ETF", "代碼", "市價", "淨值", "折溢價", "更新時間"])); workspace.addWidget(self.main_pages, 1); page.addLayout(workspace, 1)
+
+    def _switch_page(self, page_index: int) -> None:
+        self.main_pages.setCurrentIndex(page_index)
+        if page_index == 1: self.scan_limit_monitor()
+
+    def _limit_monitor_page(self) -> QWidget:
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(0, 0, 0, 0); panel = QFrame(); panel.setObjectName("panel"); body = QVBoxLayout(panel); body.setContentsMargins(20, 18, 20, 18); top = QHBoxLayout(); heading = QVBoxLayout(); title = QLabel("漲停監控"); title.setObjectName("sectionTitle"); self.limit_rule_label = QLabel(); self.limit_rule_label.setObjectName("muted"); heading.addWidget(title); heading.addWidget(self.limit_rule_label); top.addLayout(heading); top.addStretch(); self.limit_chase_selected_button = QPushButton("市價追選取標的"); self.limit_chase_selected_button.setObjectName("chaseButton"); self.limit_chase_selected_button.setEnabled(False); self.limit_chase_selected_button.clicked.connect(self._chase_selected_limit); top.addWidget(self.limit_chase_selected_button); self.limit_scan_button = QPushButton("立即掃描"); self.limit_scan_button.clicked.connect(self.scan_limit_monitor); self.limit_scan_button.setEnabled(False); top.addWidget(self.limit_scan_button); body.addLayout(top)
+        filters = QHBoxLayout(); filters.setSpacing(8); self.limit_category = QComboBox(); self.limit_category.setObjectName("limitCategory"); self.limit_category.addItems(["全部一般股", "台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300", "上市一般股", "上櫃一般股", "ETF／ETN", "可轉債", "全部商品"]); self.limit_ticks_input = QSpinBox(); self.limit_ticks_input.setRange(1, 20); self.limit_ticks_input.setValue(1); self.limit_ticks_input.setSuffix(" tick"); self.limit_volume_input = QSpinBox(); self.limit_volume_input.setRange(0, 10_000_000); self.limit_volume_input.setValue(1000); self.limit_volume_input.setSingleStep(100); self.limit_volume_input.setSuffix(" 張"); self.limit_order_quantity = QSpinBox(); self.limit_order_quantity.setRange(1, 9_999); self.limit_order_quantity.setValue(1); self.limit_order_quantity.setSingleStep(1); self.limit_order_quantity.setSuffix(" 張")
+        for label, widget in (("股票分類", self.limit_category), ("距漲停", self.limit_ticks_input), ("成交量大於", self.limit_volume_input), ("追單數量", self.limit_order_quantity)):
+            filter_label = QLabel(label); filter_label.setObjectName("filterLabel"); filters.addWidget(filter_label); filters.addWidget(widget)
+        filters.addStretch(); body.addLayout(filters); self.limit_category.currentTextChanged.connect(self._update_limit_rule_text); self.limit_ticks_input.valueChanged.connect(self._update_limit_rule_text); self.limit_volume_input.valueChanged.connect(self._update_limit_rule_text); self._update_limit_rule_text()
+        self.limit_table = QTableWidget(0, 10); self.limit_table.setHorizontalHeaderLabels(["商品", "代碼", "市場", "成交價", "漲停價", "距離", "成交量（張）", "漲幅", "更新時間", "操作"]); self.limit_table.verticalHeader().setVisible(False); self.limit_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.limit_table.setAlternatingRowColors(True); self.limit_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.limit_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.limit_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.limit_table.itemSelectionChanged.connect(self._limit_selection_changed); self.limit_table.setSortingEnabled(True); body.addWidget(self.limit_table, 1); self.limit_status = QLabel("登入後開始掃描；每 30 秒自動更新"); self.limit_status.setObjectName("source"); body.addWidget(self.limit_status); self.limit_error = QLabel("程式執行訊息：尚無錯誤"); self.limit_error.setObjectName("executionMessage"); self.limit_error.setWordWrap(True); self.limit_error.setMinimumHeight(52); body.addWidget(self.limit_error); layout.addWidget(panel); return page
+
+    def _update_limit_rule_text(self, *_: Any) -> None:
+        self.limit_rule_label.setText(f"{self.limit_category.currentText()} · 成交價距漲停 {self.limit_ticks_input.value()} tick · 成交量 > {self.limit_volume_input.value():,} 張")
+
+    def _monitor_page(self, title: str, subtitle: str, columns: list[str]) -> QWidget:
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(0, 0, 0, 0); panel = QFrame(); panel.setObjectName("panel"); body = QVBoxLayout(panel); body.setContentsMargins(20, 18, 20, 18); heading = QLabel(title); heading.setObjectName("sectionTitle"); description = QLabel(subtitle); description.setObjectName("muted"); table = QTableWidget(0, len(columns)); table.setHorizontalHeaderLabels(columns); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); table.setAlternatingRowColors(True); empty = QLabel("登入後等待即時資料"); empty.setObjectName("emptyState"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter); body.addWidget(heading); body.addWidget(description); body.addWidget(table, 1); body.addWidget(empty); layout.addWidget(panel); return page
+
+    def _order_panel(self) -> QFrame:
+        panel = QFrame(); panel.setObjectName("orderPanel"); layout = QVBoxLayout(panel); layout.setContentsMargins(0, 0, 0, 0)
+        self.order_tabs = QTabWidget(); self.order_tabs.setObjectName("orderTabs"); layout.addWidget(self.order_tabs)
+        trade_page = QWidget(); trade_layout = QVBoxLayout(trade_page); trade_layout.setContentsMargins(16, 10, 16, 13); form = QGridLayout(); form.setSpacing(8)
+        market_row = QWidget(); market_row.setObjectName("choiceRow"); market_layout = QHBoxLayout(market_row); market_layout.setContentsMargins(0, 0, 0, 0); market_layout.setSpacing(6); self.order_market_group = QButtonGroup(self); self.order_market_group.setExclusive(True)
+        for index, text in enumerate(("股票現股", "台指期貨")):
+            button = QPushButton(text); button.setObjectName("tradeOption"); button.setCheckable(True); button.setChecked(index == 0); self.order_market_group.addButton(button); market_layout.addWidget(button)
+        self.order_market_group.buttonClicked.connect(lambda button: self._order_market_changed(button.text()))
+        side_row = QWidget(); side_row.setObjectName("choiceRow"); side_layout = QHBoxLayout(side_row); side_layout.setContentsMargins(0, 0, 0, 0); side_layout.setSpacing(6); self.order_side_group = QButtonGroup(self); self.order_side_group.setExclusive(True)
+        for index, (text, name) in enumerate((("買進", "buyButton"), ("賣出", "sellButton"))):
+            button = QPushButton(text); button.setObjectName(name); button.setCheckable(True); button.setChecked(index == 0); self.order_side_group.addButton(button); side_layout.addWidget(button)
+        price_type_row = QWidget(); price_type_row.setObjectName("choiceRow"); price_type_layout = QHBoxLayout(price_type_row); price_type_layout.setContentsMargins(0, 0, 0, 0); price_type_layout.setSpacing(6); self.order_price_type_group = QButtonGroup(self); self.order_price_type_group.setExclusive(True)
+        for index, text in enumerate(("限價", "市價")):
+            button = QPushButton(text); button.setObjectName("tradeOption"); button.setCheckable(True); button.setChecked(index == 0); self.order_price_type_group.addButton(button); price_type_layout.addWidget(button)
+            if text == "限價": self.limit_price_button = button
+            else: self.market_price_button = button
+        self.order_price_type_group.buttonClicked.connect(lambda button: self._order_price_type_changed(button.text()))
+        mode_row = QWidget(); mode_row.setObjectName("choiceRow"); mode_layout = QHBoxLayout(mode_row); mode_layout.setContentsMargins(0, 0, 0, 0); mode_layout.setSpacing(6); self.order_mode_group = QButtonGroup(self); self.order_mode_group.setExclusive(True)
+        for index, text in enumerate(("一般", "預掛")):
+            button = QPushButton(text); button.setObjectName("preorderButton" if text == "預掛" else "tradeOption"); button.setCheckable(True); button.setChecked(index == 0); self.order_mode_group.addButton(button); mode_layout.addWidget(button)
+            if text == "預掛": self.preorder_button = button
+        self.order_mode_group.buttonClicked.connect(lambda button: self._order_mode_changed(button.text()))
+        self.order_symbol = QLineEdit("2330"); self.order_price = QLineEdit(); self.order_price.setPlaceholderText("價格"); self.order_quantity = QSpinBox(); self.order_quantity.setRange(1, 999999); self.order_quantity.setValue(1000)
+        fields = [("市場", market_row), ("商品", self.order_symbol), ("方向", side_row), ("價格類型", price_type_row), ("送單方式", mode_row), ("委託價", self.order_price), ("數量／口數", self.order_quantity)]
+        for index, (label, widget) in enumerate(fields): form.addWidget(QLabel(label), index // 2 * 2, index % 2 * 2); form.addWidget(widget, index // 2 * 2 + 1, index % 2 * 2)
+        trade_layout.addLayout(form); self.order_button = QPushButton("送出委託"); self.order_button.setObjectName("primaryButton"); self.order_button.setEnabled(False); self.order_button.clicked.connect(self.submit_order); trade_layout.addWidget(self.order_button)
+
+        pending_page = QWidget(); pending_layout = QVBoxLayout(pending_page); pending_layout.setContentsMargins(12, 10, 12, 12); pending_layout.setSpacing(8)
+        self.pending_table = QTableWidget(0, 7); self.pending_table.setHorizontalHeaderLabels(["勾選", "方向", "商品", "價格", "數量", "預計送出", "狀態"]); self.pending_table.verticalHeader().setVisible(False); self.pending_table.setAlternatingRowColors(True); self.pending_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.pending_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        header = self.pending_table.horizontalHeader()
+        for column in (0, 1, 2, 4, 6): header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch); header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        pending_layout.addWidget(self.pending_table, 1)
+        pending_row = QHBoxLayout(); self.pending_label = QLabel("本機預掛 0 筆"); self.pending_label.setObjectName("source"); self.select_all_pending_button = QPushButton("全選可取消"); self.select_all_pending_button.clicked.connect(self._select_all_pending); self.cancel_selected_button = QPushButton("取消勾選掛單"); self.cancel_selected_button.setObjectName("dangerButton"); self.cancel_selected_button.setEnabled(False); self.cancel_selected_button.clicked.connect(self._cancel_selected_pending_orders); pending_row.addWidget(self.pending_label); pending_row.addStretch(); pending_row.addWidget(self.select_all_pending_button); pending_row.addWidget(self.cancel_selected_button); pending_layout.addLayout(pending_row)
+        self.order_tabs.addTab(trade_page, "快速下單"); self.order_tabs.addTab(pending_page, "預掛查詢 (0)")
+        return panel
+
+    def _daily_panel(self) -> QFrame:
+        panel = QFrame(); panel.setObjectName("panel"); layout = QVBoxLayout(panel); layout.setContentsMargins(16, 13, 16, 13); bar = QHBoxLayout(); title = QLabel("歷史日 K"); title.setObjectName("sectionTitle"); bar.addWidget(title); bar.addStretch(); self.chart_symbol = QLineEdit("2330"); self.chart_symbol.setMaximumWidth(90); bar.addWidget(self.chart_symbol); load = QPushButton("載入"); load.clicked.connect(self.load_daily_chart); bar.addWidget(load); layout.addLayout(bar); self.daily_chart = CandleChart(); layout.addWidget(self.daily_chart, 1); self.daily_source = QLabel("登入後自動載入第一檔持股"); self.daily_source.setObjectName("source"); layout.addWidget(self.daily_source); return panel
+
+    def _theme(self) -> None:
+        self.setStyleSheet("""
+        QWidget#root{background:#070b16;color:#e8eef9;font-family:'Microsoft JhengHei','Segoe UI';font-size:10pt} QLabel#brand{font-size:25pt;font-weight:800;color:#f7f9ff} QLabel#muted{color:#7f8da8} QLabel#eyebrow{color:#6f8bb8;font-size:8pt;font-weight:700} QLabel#filterLabel{color:#ffffff;font-weight:700} QLabel#sectionTitle{font-size:15pt;font-weight:700;color:#edf3ff} QLabel#heroPrice{font-size:34pt;font-weight:800;color:#f8fbff} QLabel#upChange{color:#ff667d;font-size:13pt;font-weight:700} QLabel#downChange{color:#35d3a3;font-size:13pt;font-weight:700} QLabel#flatChange{color:#8b99b2;font-size:13pt;font-weight:700} QLabel#source{color:#65738d;font-size:9pt} QLabel#executionMessage{background:#160f19;color:#ffb0bf;border:1px solid #633142;border-radius:7px;padding:9px 11px;font-weight:600} QLabel#badge{background:#1b2b4a;color:#8fb2ff;padding:5px 10px;border-radius:6px;font-weight:700} QLabel#offlineDot{color:#58657a} QLabel#onlineDot{color:#35d3a3}
+        QFrame#loginBar,QFrame#panel,QFrame#orderPanel,QTabWidget#marketTabs::pane{background:#101828;border:1px solid #22314d;border-radius:11px} QTabWidget#orderTabs::pane{background:#101828;border:0;border-top:1px solid #22314d} QTabBar::tab{background:#0c1423;color:#7f91ad;padding:9px 22px;border:1px solid #22314d} QTabBar::tab:selected{background:#1a2b49;color:#ddebff;border-bottom:2px solid #4d7ff3}
+        QFrame#sidebar{background:#0c1322;border:1px solid #22314d;border-radius:11px} QPushButton#navButton{background:transparent;color:#8999b4;border:0;border-radius:7px;text-align:left;padding:10px 13px} QPushButton#navButton:hover{background:#14213a;color:#dbe8ff} QPushButton#navButton:checked{background:#1c3156;color:#ffffff;border-left:3px solid #4d7ff3} QLabel#emptyState{color:#61708b;padding:14px}
+        QFrame#orderPanel QLabel{color:#ffffff} QFrame#orderPanel QLineEdit,QFrame#orderPanel QSpinBox{color:#ffffff} QWidget#choiceRow{background:transparent}
+        QPushButton#tradeOption{background:#16243c;color:#dce8fa;border:1px solid #2b3e60} QPushButton#tradeOption:checked{background:#315fae;color:#ffffff;border:1px solid #6b9aff}
+        QPushButton#preorderButton{background:#382a15;color:#ffd38a;border:1px solid #705326} QPushButton#preorderButton:checked{background:#a96b17;color:#ffffff;border:1px solid #ffc65e}
+        QPushButton#buyButton{background:#3a1822;color:#ff9cac;border:1px solid #6e2a3a} QPushButton#buyButton:checked{background:#a92f46;color:#ffffff;border:1px solid #ff7187}
+        QPushButton#sellButton{background:#12352d;color:#77dfbf;border:1px solid #236c58} QPushButton#sellButton:checked{background:#17795e;color:#ffffff;border:1px solid #48d4ac}
+        QSplitter#panelSplitter::handle{background:#070b16} QSplitter#panelSplitter::handle:horizontal{width:9px} QSplitter#panelSplitter::handle:vertical{height:9px} QSplitter#panelSplitter::handle:hover{background:#315fae}
+        QLineEdit,QSpinBox,QComboBox{background:#0a1120;border:1px solid #293957;border-radius:6px;color:#edf3ff;padding:7px 9px} QComboBox QAbstractItemView{background:#101828;color:#edf3ff;selection-background-color:#315fae} QComboBox#limitCategory{background:#0a1120;color:#ffffff;font-weight:700} QComboBox#limitCategory QAbstractItemView{background:#101828;color:#ffffff;selection-background-color:#315fae} QPushButton{background:#182640;color:#bed1f2;border:1px solid #2c4167;border-radius:6px;padding:7px 12px;font-weight:600} QPushButton:hover{background:#23395d} QPushButton:disabled{color:#536078;border-color:#202a3d} QPushButton#primaryButton{background:#3d73ed;color:white;border:0} QPushButton#primaryButton:hover{background:#5388fb} QPushButton#dangerButton{background:#46202a;color:#ff9cac;border:1px solid #7e3142} QPushButton#dangerButton:hover{background:#692a39;color:#ffffff} QPushButton#chaseButton{background:#8d263b;color:#ffffff;border:1px solid #e45b72;padding:5px 9px} QPushButton#chaseButton:hover{background:#b7354f}
+        QTableWidget{background:#0b1322;alternate-background-color:#0e192b;color:#dce7f7;border:0;gridline-color:#1e2c44} QHeaderView::section{background:#182641;color:#9fb6da;border:0;padding:7px;font-weight:700}
+        """)
+
+    def _load_settings(self) -> None:
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8")); self.cert_path = str(settings.get("cert_path", "")); protected = str(settings.get("protected_cert_password", "")); self.cert_password_override = unprotect_secret(protected) if protected else ""
+        except (OSError, ValueError, TypeError):
+            self.cert_path = ""; self.cert_password_override = ""
+
+    def _save_settings(self) -> None:
+        try:
+            settings = {"cert_path": self.cert_path}
+            if self.cert_password_override: settings["protected_cert_password"] = protect_secret(self.cert_password_override)
+            SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError: pass
+
+    def _setup_certificate(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "一次性憑證設定", self.cert_path, "PFX 憑證 (*.pfx);;所有檔案 (*.*)")
+        if not path: return
+        password, ok = QInputDialog.getText(self, "一次性憑證設定", "請輸入憑證密碼（由 Windows 加密保存）：", QLineEdit.EchoMode.Password)
+        if ok:
+            self.cert_path = path; self.cert_password_override = password; self._save_settings(); self.status.setText("憑證路徑已設定")
+
+    def _ask_certificate_password(self) -> bool:
+        if self.cert_password_override: return True
+        password, ok = QInputDialog.getText(self, "一次性憑證設定", "請輸入憑證密碼（由 Windows 加密保存）：", QLineEdit.EchoMode.Password)
+        if not ok or not password: return False
+        self.cert_password_override = password; self._save_settings(); return True
+
+    def _clear_certificate_password(self) -> None:
+        self.cert_password_override = ""
+        try: SETTINGS_FILE.write_text(json.dumps({"cert_path": self.cert_path}, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError: pass
+
+    def _load_pending_orders(self) -> None:
+        try:
+            payload = json.loads(PENDING_FILE.read_text(encoding="utf-8")); self.pending_orders = [row for row in payload if isinstance(row, dict)] if isinstance(payload, list) else []
+        except (OSError, ValueError, TypeError): self.pending_orders = []
+        self._update_pending_label()
+
+    def _save_pending_orders(self) -> None:
+        try: PENDING_FILE.write_text(json.dumps(self.pending_orders, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError: pass
+        self._update_pending_label()
+
+    def _update_pending_label(self) -> None:
+        queued = sum(row.get("status") == "queued" for row in self.pending_orders); errors = sum(row.get("status") == "error" for row in self.pending_orders); sending = sum(row.get("status") == "sending" for row in self.pending_orders); text = f"等待送出 {queued} 筆"
+        if sending: text += f" · 送出中 {sending} 筆"
+        if errors: text += f" · 待確認 {errors} 筆"
+        self.pending_label.setText(text); self.order_tabs.setTabText(1, f"預掛查詢 ({len(self.pending_orders)})"); self.select_all_pending_button.setEnabled(any(row.get("status") != "sending" for row in self.pending_orders)); self.cancel_selected_button.setEnabled(any(row.get("status") != "sending" for row in self.pending_orders)); self._render_pending_orders()
+
+    def _render_pending_orders(self) -> None:
+        self.pending_table.setRowCount(len(self.pending_orders))
+        status_labels = {"queued": "等待送出", "sending": "送出中", "error": "待確認"}
+        for row_index, row in enumerate(self.pending_orders):
+            status = str(row.get("status", "queued")); cancellable = status != "sending"; checkbox = QTableWidgetItem(); checkbox.setData(Qt.ItemDataRole.UserRole, str(row.get("id", ""))); checkbox.setCheckState(Qt.CheckState.Unchecked)
+            flags = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+            if cancellable: flags |= Qt.ItemFlag.ItemIsUserCheckable
+            checkbox.setFlags(flags); self.pending_table.setItem(row_index, 0, checkbox)
+            try: execute_at = datetime.fromisoformat(str(row.get("execute_at", ""))).strftime("%m/%d %H:%M")
+            except ValueError: execute_at = "時間錯誤"
+            price = f'{row.get("price_type", "限價")} {row.get("price") or "—"}'
+            values = [str(row.get("side", "—")), str(row.get("symbol", "—")), price, str(row.get("quantity", "—")), execute_at, status_labels.get(status, status)]
+            for column, value in enumerate(values, 1):
+                item = QTableWidgetItem(value); item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if column == 1: item.setForeground(QColor("#ff667d" if value == "買進" else "#35d3a3"))
+                if column == 6 and status == "error": item.setForeground(QColor("#ffb35c")); item.setToolTip(str(row.get("error", "未知錯誤")))
+                self.pending_table.setItem(row_index, column, item)
+
+    def _select_all_pending(self) -> None:
+        for row_index in range(self.pending_table.rowCount()):
+            item = self.pending_table.item(row_index, 0)
+            if item and item.flags() & Qt.ItemFlag.ItemIsUserCheckable: item.setCheckState(Qt.CheckState.Checked)
+
+    def _cancel_selected_pending_orders(self) -> None:
+        selected_ids: set[str] = set()
+        for row_index in range(self.pending_table.rowCount()):
+            item = self.pending_table.item(row_index, 0)
+            if item and item.checkState() == Qt.CheckState.Checked: selected_ids.add(str(item.data(Qt.ItemDataRole.UserRole)))
+        cancellable_ids = {str(row.get("id")) for row in self.pending_orders if row.get("status") != "sending"}
+        selected_ids &= cancellable_ids
+        if not selected_ids: QMessageBox.information(self, "尚未勾選", "請先勾選要取消的本機預掛。"); return
+        if QMessageBox.question(self, "取消勾選掛單", f"確定取消勾選的 {len(selected_ids)} 筆本機預掛？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes: return
+        self.pending_orders = [row for row in self.pending_orders if str(row.get("id")) not in selected_ids]; self._save_pending_orders()
+
+    def _queue_preorder(self, market: str, symbol: str, side: str, price_type: str, order_price: str, quantity: int) -> None:
+        execute_at = next_stock_order_window(); self.pending_orders.append({"id": uuid.uuid4().hex, "market": market, "symbol": symbol, "side": side, "price_type": price_type, "price": order_price, "quantity": quantity, "execute_at": execute_at.isoformat(timespec="seconds"), "status": "queued"}); self._save_pending_orders(); self.order_tabs.setCurrentIndex(1); QMessageBox.information(self, "已加入本機預掛", f"委託尚未送到券商。\n預計送出：{execute_at:%Y-%m-%d %H:%M}\n\n可在「預掛查詢」勾選並取消。程式必須保持開啟並維持登入。")
+
+    def _check_pending_orders(self) -> None:
+        if not self.connected or any(row.get("status") == "sending" for row in self.pending_orders): return
+        now = datetime.now()
+        for row in self.pending_orders:
+            if row.get("status") != "queued": continue
+            try: due = datetime.fromisoformat(str(row["execute_at"]))
+            except (KeyError, TypeError, ValueError): row["status"] = "error"; row["error"] = "預掛時間格式錯誤"; self._save_pending_orders(); continue
+            if due > now: continue
+            row["status"] = "sending"; self._save_pending_orders(); threading.Thread(target=self._order_worker, args=(row["market"], row["symbol"], row["side"], row["price_type"], row["price"], int(row["quantity"]), "預掛執行", row["id"]), daemon=True).start(); break
+
+    def _remove_pending_order(self, pending_id: str) -> None:
+        self.pending_orders = [row for row in self.pending_orders if row.get("id") != pending_id]; self._save_pending_orders()
+
+    def _fail_pending_order(self, pending_id: str, message: str) -> None:
+        for row in self.pending_orders:
+            if row.get("id") == pending_id: row["status"] = "error"; row["error"] = message; break
+        self._save_pending_orders()
+
+    def _reschedule_pending_order(self, pending_id: str) -> None:
+        execute_at = next_stock_order_window()
+        for row in self.pending_orders:
+            if row.get("id") == pending_id: row["status"] = "queued"; row["execute_at"] = execute_at.isoformat(timespec="seconds"); row["error"] = "券商尚未開放，已順延"; break
+        self._save_pending_orders()
+
+    def login(self) -> None:
+        uid, password = self.user_id.text().strip(), self.user_password.text()
+        if not uid or not password: QMessageBox.warning(self, "資料不足", "請輸入帳號與密碼。"); return
+        if not self.cert_path or not Path(self.cert_path).is_file(): self._setup_certificate()
+        if not self.cert_path or not Path(self.cert_path).is_file(): return
+        if not self._ask_certificate_password(): return
+        self.login_button.setEnabled(False); self.status.setText("登入中…"); cert_password = self.cert_password_override
+        threading.Thread(target=self._login_worker, args=(self.environment_name, uid, password, cert_password), daemon=True).start()
+
+    def _login_worker(self, environment: str, uid: str, password: str, cert_password: str) -> None:
+        try:
+            sdk = FubonSDK(30, 2, url=TEST_URL) if environment == "test" else FubonSDK(30, 2); result = sdk.login(uid, password, self.cert_path, cert_password)
+            if not getattr(result, "is_success", False): raise RuntimeError(getattr(result, "message", None) or "登入失敗")
+            accounts = list(getattr(result, "data", []) or [])
+            if not accounts: raise RuntimeError("登入成功，但沒有可用帳戶")
+            account = accounts[0]; inv = sdk.accounting.inventories(account); rows = []
+            if getattr(inv, "is_success", False): rows = [{"symbol": str(getattr(item, "stock_no", "")), "quantity": getattr(item, "today_qty", 0), "tradable": getattr(item, "tradable_qty", 0)} for item in (getattr(inv, "data", []) or [])]
+            sdk.init_realtime(Mode.Normal); self.events.put(("login_ok", (sdk, account, rows, environment)))
+        except Exception as exc: self.events.put(("login_error", str(exc)))
+
+    def _start_data(self) -> None:
+        threading.Thread(target=self._http_worker, daemon=True).start(); threading.Thread(target=self._ws_worker, daemon=True).start()
+
+    def refresh(self) -> None:
+        if self.connected: threading.Thread(target=self._http_worker, daemon=True).start()
+
+    def scan_limit_monitor(self) -> None:
+        if not self.connected or self.limit_scan_running: return
+        ticks, min_volume, category = self.limit_ticks_input.value(), self.limit_volume_input.value(), self.limit_category.currentText()
+        self.limit_scan_running = True; self.limit_scan_button.setEnabled(False); self.limit_status.setText(f"正在掃描：{category} · 距漲停 {ticks} tick · 量 > {min_volume:,} 張…")
+        threading.Thread(target=self._limit_scan_worker, args=(ticks, min_volume, category), daemon=True).start()
+
+    def _index_groups(self, items: list[Any]) -> dict[str, set[str]]:
+        cached: dict[str, Any] = {}
+        try:
+            loaded = json.loads(GROUPS_FILE.read_text(encoding="utf-8")); cached = loaded if isinstance(loaded, dict) else {}
+        except (OSError, ValueError, TypeError): pass
+        groups = cached.get("groups") if isinstance(cached.get("groups"), dict) else {}
+        if str(cached.get("date")) == date.today().isoformat() and all(name in groups for name in ("台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300")):
+            return {name: set(map(str, symbols)) for name, symbols in groups.items()}
+        try:
+            def etf_constituents(ticker: str) -> set[str]:
+                params = {"APIType": "ETFAPI", "CompanyName": "YUANTAFUNDS", "PageName": f"/tradeInfo/pcf/{ticker}", "DeviceId": "00000000-0000-0000-0000-000000000000", "FuncId": "PCF/Daily", "AppName": "ETF", "Device": "3", "Platform": "ETF", "ticker": ticker, "ndate": ""}
+                payload = fetch_json(YUANTA_PCF_URL, params); rows = payload.get("InKind", {}).get("FundComposition", []) if isinstance(payload, dict) else []
+                return {str(row.get("stkcd")) for row in rows if isinstance(row, dict) and str(row.get("stkcd", "")).isdigit()}
+            taiwan50, mid100 = etf_constituents("0050"), etf_constituents("0051")
+            company_rows = fetch_json(TWSE_COMPANY_URL); issued_shares: dict[str, int] = {}
+            for row in company_rows if isinstance(company_rows, list) else []:
+                try: issued_shares[str(row["公司代號"])] = int(str(row["已發行普通股數或TDR原股發行股數"]).replace(",", ""))
+                except (KeyError, TypeError, ValueError): continue
+            ranked: list[tuple[float, str]] = []
+            for snapshot in items:
+                symbol = str(getattr(snapshot, "symbol", "") or ""); market = str(getattr(snapshot, "market", "") or ""); reference = as_float(getattr(snapshot, "reference_price", None)); shares = issued_shares.get(symbol)
+                if market in ("TAIEX", "TSE") and reference and shares: ranked.append((reference * shares, symbol))
+            ranked.sort(reverse=True); small300 = {symbol for _, symbol in ranked[150:450]}
+            if len(taiwan50) < 40 or len(mid100) < 80 or len(small300) < 250: raise RuntimeError("指數成分資料筆數不足")
+            serializable = {"台灣50": sorted(taiwan50), "台灣中型100": sorted(mid100), "台灣50 + 中型100": sorted(taiwan50 | mid100), "小型股300": sorted(small300)}; GROUPS_FILE.write_text(json.dumps({"date": date.today().isoformat(), "updated": datetime.now().isoformat(timespec="seconds"), "groups": serializable}, ensure_ascii=False, indent=2), encoding="utf-8"); return {name: set(symbols) for name, symbols in serializable.items()}
+        except Exception:
+            if groups: return {name: set(map(str, symbols)) for name, symbols in groups.items()}
+            raise
+
+    def _limit_scan_worker(self, ticks: int, min_volume: int, category: str) -> None:
+        try:
+            stock_types = [StockType.EtfAndEtn] if category == "ETF／ETN" else [StockType.CovertBond] if category == "可轉債" else [StockType.Stock, StockType.EtfAndEtn, StockType.CovertBond] if category == "全部商品" else [StockType.Stock]
+            result = self.sdk.stock.query_symbol_snapshot(self.account, MarketType.Common, stock_types)
+            if not getattr(result, "is_success", False): raise RuntimeError(getattr(result, "message", None) or "批次行情查詢失敗")
+            payload = getattr(result, "data", None); raw_items = getattr(payload, "symbols", payload); items = list(raw_items or []); matches: list[dict[str, Any]] = []; rest = self.sdk.marketdata.rest_client.stock; index_categories = {"台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300"}; allowed = self._index_groups(items).get(category, set()) if category in index_categories else None
+            for snapshot in items:
+                symbol = str(getattr(snapshot, "symbol", "") or "")
+                market_raw = str(getattr(snapshot, "market", "") or ""); market = "上市" if market_raw in ("TAIEX", "TSE") else "上櫃" if market_raw in ("TAISDAQ", "OTC") else market_raw
+                if allowed is not None and symbol not in allowed: continue
+                if category == "上市一般股" and market != "上市": continue
+                if category == "上櫃一般股" and market != "上櫃": continue
+                last_price = as_float(getattr(snapshot, "last_price", None)); limit_up = as_float(getattr(snapshot, "limitup_price", None)); volume = as_float(getattr(snapshot, "total_volume", None)); target = previous_stock_ticks(limit_up, ticks)
+                if not symbol or last_price is None or target is None or volume is None: continue
+                if abs(last_price - target) > .0001 or volume <= min_volume: continue
+                name = symbol; percent = None; update_time = str(getattr(snapshot, "update_time", "") or "")
+                try:
+                    quote = unwrap(rest.intraday.quote(symbol=symbol)); actual_trade = as_float(quote.get("closePrice")); total = quote.get("total") if isinstance(quote.get("total"), dict) else {}; actual_volume = as_float(total.get("tradeVolume"))
+                    if actual_trade is not None: last_price = actual_trade
+                    if actual_volume is not None: volume = actual_volume
+                    name = str(quote.get("name") or symbol); percent = as_float(quote.get("changePercent"))
+                except Exception:
+                    reference = as_float(getattr(snapshot, "reference_price", None)); percent = ((last_price / reference) - 1) * 100 if reference else None
+                if abs(last_price - target) > .0001 or volume <= min_volume: continue
+                unit = int(as_float(getattr(snapshot, "unit", None)) or 1000)
+                matches.append({"name": name, "symbol": symbol, "market": market, "last": last_price, "limit": limit_up, "ticks": ticks, "volume": int(volume), "percent": percent, "time": update_time, "unit": unit})
+            matches.sort(key=lambda row: row["volume"], reverse=True); self.events.put(("limit_scan", (matches, len(items), datetime.now().strftime("%H:%M:%S"), ticks, min_volume, category)))
+        except Exception as exc:
             self.events.put(("limit_scan_error", str(exc)))
 
     def _chase_limit_order(self, row: dict[str, Any]) -> None:
@@ -463,4 +737,3 @@ class MarketWindow(QMainWindow):
 
 if __name__ == "__main__":
     application = QApplication([]); window = MarketWindow(); window.show(); application.exec()
-

@@ -6,7 +6,7 @@
 
 ## Windows 免安裝版
 
-不需 Python、不需執行 BAT。請到 [GitHub Releases](https://github.com/Mia1688/fubon-neo-market-window/releases/latest) 下載 `FubonNeoMarketWindow-v1.1.0-win64.zip`，全部解壓縮後執行 `FubonNeoMarketWindow.exe`。請保留 EXE 旁的 `_internal` 資料夾。
+不需 Python、不需執行 BAT。請到 [GitHub Releases](https://github.com/Mia1688/fubon-neo-market-window/releases/latest) 下載 `FubonNeoMarketWindow-v1.1.1-win64.zip`，全部解壓縮後執行 `FubonNeoMarketWindow.exe`。請保留 EXE 旁的 `_internal` 資料夾。
 
 ## 畫面配置
 
@@ -26,7 +26,9 @@
 
 ## 漲停監控
 
-登入後每 30 秒呼叫富邦 `query_symbol_snapshot` 掃描標的。使用者可直接調整「距漲停 tick 數」與「最低成交量（張）」；候選標的會再以 Intraday Quote 的 `closePrice` 與 `total.tradeVolume` 複核，避免使用試撮價格。
+登入後每 30 秒更新一次。程式以富邦 `query_symbol_snapshot` 取得當日漲停價及交易單位，再以 `snapshot/quotes` 一次取得上市、上櫃與創新板的盤中成交價、成交量，避免把不含即時更新的商品資料誤當成盤中行情。使用者可直接調整「距漲停 tick 數」與「最低成交量（張）」；試撮期間使用最近實際成交價，不會把試撮價格列入追單條件。
+
+按「立即掃描」後，狀態列會立即顯示掃描進度；重複按下會顯示目前等待秒數。若富邦或公司網路超過 30 秒未回應，按鈕會自動恢復，失敗原因會保留在下方，不會再無聲卡住。
 
 股票分類可選全部一般股、上市、上櫃、ETF／ETN、可轉債，以及台灣50、台灣中型100、台灣50＋中型100、小型股300。台灣50與中型100取自元大0050／0051官方每日PCF；小型股300依證交所編製規則，以官方發行股數和富邦參考價計算上市市值第151～450名。分類每日更新一次並快取於 `stock_groups.json`。
 
@@ -47,4 +49,3 @@
 ## 安全提醒
 
 `settings.json`、`pending_orders.json`、`stock_groups.json`、`log/` 及 PFX/P12 憑證均被排除在版本控制之外。請勿把帳號、密碼或憑證提交到公開儲存庫。使用真實下單功能前，請先以小額委託確認參數與風控設定。
-

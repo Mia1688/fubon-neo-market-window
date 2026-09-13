@@ -104,6 +104,16 @@ def fmt(value: Any) -> str:
     return "—" if number is None else f"{number:,.2f}".rstrip("0").rstrip(".")
 
 
+def snapshot_time(value: Any) -> str:
+    """Format Fugle snapshot timestamps supplied as seconds, ms, or microseconds."""
+    number = as_float(value)
+    if number is None or number <= 0: return datetime.now().strftime("%H:%M:%S")
+    if number > 100_000_000_000_000: number /= 1_000_000
+    elif number > 100_000_000_000: number /= 1_000
+    try: return datetime.fromtimestamp(number).strftime("%H:%M:%S")
+    except (OSError, OverflowError, ValueError): return datetime.now().strftime("%H:%M:%S")
+
+
 def previous_stock_tick(price: Any) -> float | None:
     """Return the valid stock price exactly one tick below the supplied price."""
     number = as_float(price)
@@ -241,7 +251,7 @@ class CandleChart(QWidget):
 class MarketWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__(); self.setWindowTitle("看盤視窗"); self.resize(1460, 900); self.setMinimumSize(1100, 700)
-        self.sdk: Any = None; self.account: Any = None; self.events: queue.Queue[tuple[str, Any]] = queue.Queue(); self.inventory: list[dict[str, Any]] = []; self.quotes: dict[str, dict[str, Any]] = {}; self.pending_orders: list[dict[str, Any]] = []; self.limit_rows_by_symbol: dict[str, dict[str, Any]] = {}; self.previous_index_close: float | None = None; self.connected = False; self.environment_name = "production"; self.cert_password_override = ""; self.limit_scan_running = False
+        self.sdk: Any = None; self.account: Any = None; self.events: queue.Queue[tuple[str, Any]] = queue.Queue(); self.inventory: list[dict[str, Any]] = []; self.quotes: dict[str, dict[str, Any]] = {}; self.pending_orders: list[dict[str, Any]] = []; self.limit_rows_by_symbol: dict[str, dict[str, Any]] = {}; self.previous_index_close: float | None = None; self.connected = False; self.environment_name = "production"; self.cert_password_override = ""; self.limit_scan_running = False; self.limit_scan_serial = 0; self.limit_scan_started_at: datetime | None = None; self.limit_metadata_cache: dict[str, tuple[dict[str, dict[str, Any]], list[Any]]] = {}; self.limit_metadata_cache_date: date | None = None
         self._ui(); self._theme(); self._load_settings(); self._load_pending_orders(); self.timer = QTimer(self); self.timer.timeout.connect(self._drain); self.timer.start(100); self.limit_timer = QTimer(self); self.limit_timer.setInterval(30_000); self.limit_timer.timeout.connect(self.scan_limit_monitor); self.limit_timer.start(); self.pending_timer = QTimer(self); self.pending_timer.setInterval(1_000); self.pending_timer.timeout.connect(self._check_pending_orders); self.pending_timer.start()
 
     def _ui(self) -> None:
@@ -477,10 +487,24 @@ class MarketWindow(QMainWindow):
         if self.connected: threading.Thread(target=self._http_worker, daemon=True).start()
 
     def scan_limit_monitor(self) -> None:
-        if not self.connected or self.limit_scan_running: return
+        if not self.connected:
+            self.limit_status.setText("尚未登入，無法取得盤中行情")
+            self.limit_error.setText("程式執行失敗原因：請先登入富邦 Neo 正式環境，再按立即掃描。")
+            return
+        if self.limit_scan_running:
+            elapsed = int((datetime.now() - self.limit_scan_started_at).total_seconds()) if self.limit_scan_started_at else 0
+            self.limit_status.setText(f"掃描仍在執行中（已等待 {elapsed} 秒），請稍候…")
+            self.limit_error.setText("程式執行訊息：正在等候富邦全市場行情；超過 30 秒會自動解除並顯示逾時原因。")
+            return
         ticks, min_volume, category = self.limit_ticks_input.value(), self.limit_volume_input.value(), self.limit_category.currentText()
-        self.limit_scan_running = True; self.limit_scan_button.setEnabled(False); self.limit_status.setText(f"正在掃描：{category} · 距漲停 {ticks} tick · 量 > {min_volume:,} 張…")
-        threading.Thread(target=self._limit_scan_worker, args=(ticks, min_volume, category), daemon=True).start()
+        self.limit_scan_running = True; self.limit_scan_started_at = datetime.now(); self.limit_scan_serial += 1; scan_serial = self.limit_scan_serial; self.limit_scan_button.setText("掃描中…"); self.limit_status.setText(f"正在掃描：{category} · 距漲停 {ticks} tick · 量 > {min_volume:,} 張…"); self.limit_error.setText("程式執行訊息：正在取得上市、上櫃及創新板盤中行情。")
+        QTimer.singleShot(30_000, lambda serial=scan_serial: self._limit_scan_timeout(serial))
+        threading.Thread(target=self._limit_scan_worker, args=(scan_serial, ticks, min_volume, category), daemon=True).start()
+
+    def _limit_scan_timeout(self, scan_serial: int) -> None:
+        if not self.limit_scan_running or scan_serial != self.limit_scan_serial: return
+        self.limit_scan_running = False; self.limit_scan_serial += 1; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(self.connected); self.limit_status.setText("掃描逾時，可再次按立即掃描")
+        self.limit_error.setText("程式執行失敗原因：等待富邦全市場行情超過 30 秒。請確認公司網路／防火牆可連線富邦行情服務後重試。")
 
     def _index_groups(self, items: list[Any]) -> dict[str, set[str]]:
         cached: dict[str, Any] = {}
@@ -511,35 +535,50 @@ class MarketWindow(QMainWindow):
             if groups: return {name: set(map(str, symbols)) for name, symbols in groups.items()}
             raise
 
-    def _limit_scan_worker(self, ticks: int, min_volume: int, category: str) -> None:
+    def _limit_scan_worker(self, scan_serial: int, ticks: int, min_volume: int, category: str) -> None:
         try:
             stock_types = [StockType.EtfAndEtn] if category == "ETF／ETN" else [StockType.CovertBond] if category == "可轉債" else [StockType.Stock, StockType.EtfAndEtn, StockType.CovertBond] if category == "全部商品" else [StockType.Stock]
-            result = self.sdk.stock.query_symbol_snapshot(self.account, MarketType.Common, stock_types)
-            if not getattr(result, "is_success", False): raise RuntimeError(getattr(result, "message", None) or "批次行情查詢失敗")
-            payload = getattr(result, "data", None); raw_items = getattr(payload, "symbols", payload); items = list(raw_items or []); matches: list[dict[str, Any]] = []; rest = self.sdk.marketdata.rest_client.stock; index_categories = {"台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300"}; allowed = self._index_groups(items).get(category, set()) if category in index_categories else None
-            for snapshot in items:
-                symbol = str(getattr(snapshot, "symbol", "") or "")
-                market_raw = str(getattr(snapshot, "market", "") or ""); market = "上市" if market_raw in ("TAIEX", "TSE") else "上櫃" if market_raw in ("TAISDAQ", "OTC") else market_raw
+            cache_key = ",".join(str(item) for item in stock_types)
+            if self.limit_metadata_cache_date != date.today(): self.limit_metadata_cache = {}; self.limit_metadata_cache_date = date.today()
+            cached = self.limit_metadata_cache.get(cache_key)
+            if cached is None:
+                result = self.sdk.stock.query_symbol_snapshot(self.account, MarketType.Common, stock_types)
+                if not getattr(result, "is_success", False): raise RuntimeError(getattr(result, "message", None) or "漲跌停商品資料查詢失敗")
+                payload = getattr(result, "data", None); raw_items = getattr(payload, "symbols", payload); items = list(raw_items or []); metadata: dict[str, dict[str, Any]] = {}
+                for snapshot in items:
+                    symbol = str(getattr(snapshot, "symbol", "") or "")
+                    if symbol: metadata[symbol] = {"limit": as_float(getattr(snapshot, "limitup_price", None)), "unit": int(as_float(getattr(snapshot, "unit", None)) or 1000), "market": str(getattr(snapshot, "market", "") or "")}
+                self.limit_metadata_cache[cache_key] = (metadata, items)
+            else:
+                metadata, items = cached
+
+            index_categories = {"台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300"}; allowed = self._index_groups(items).get(category, set()) if category in index_categories else None
+            rest = self.sdk.marketdata.rest_client.stock; quote_type = "ALLBUT099" if category in {"ETF／ETN", "全部商品", "可轉債"} else "COMMONSTOCK"; quote_rows: list[tuple[str, dict[str, Any]]] = []; market_errors: list[str] = []
+            for market_code, market_name in (("TSE", "上市"), ("OTC", "上櫃"), ("TIB", "創新板")):
+                try:
+                    response = rest.snapshot.quotes(market=market_code, type=quote_type); rows = response.get("data", []) if isinstance(response, dict) else []
+                    quote_rows.extend((market_name, row) for row in rows if isinstance(row, dict))
+                except Exception as exc:
+                    market_errors.append(f"{market_name}: {exc}")
+            if not quote_rows: raise RuntimeError("上市、上櫃及創新板行情皆未取得" + (f"（{'；'.join(market_errors)}）" if market_errors else ""))
+
+            matches: list[dict[str, Any]] = []
+            for market, quote in quote_rows:
+                symbol = str(quote.get("symbol", "") or ""); symbol_metadata = metadata.get(symbol, {}); limit_up = as_float(symbol_metadata.get("limit")); target = previous_stock_ticks(limit_up, ticks)
                 if allowed is not None and symbol not in allowed: continue
                 if category == "上市一般股" and market != "上市": continue
                 if category == "上櫃一般股" and market != "上櫃": continue
-                last_price = as_float(getattr(snapshot, "last_price", None)); limit_up = as_float(getattr(snapshot, "limitup_price", None)); volume = as_float(getattr(snapshot, "total_volume", None)); target = previous_stock_ticks(limit_up, ticks)
+                instrument_type = str(quote.get("type", "") or "").upper()
+                if category == "ETF／ETN" and instrument_type not in {"ETF", "ETN"}: continue
+                if category == "可轉債" and instrument_type not in {"CB", "CONVERTIBLE_BOND", "CONVERTIBLEBOND"}: continue
+                last_price = as_float(quote.get("closePrice") if quote.get("isTrial") else quote.get("lastPrice")); last_price = last_price if last_price is not None else as_float(quote.get("closePrice")); volume = as_float(quote.get("tradeVolume"))
                 if not symbol or last_price is None or target is None or volume is None: continue
                 if abs(last_price - target) > .0001 or volume <= min_volume: continue
-                name = symbol; percent = None; update_time = str(getattr(snapshot, "update_time", "") or "")
-                try:
-                    quote = unwrap(rest.intraday.quote(symbol=symbol)); actual_trade = as_float(quote.get("closePrice")); total = quote.get("total") if isinstance(quote.get("total"), dict) else {}; actual_volume = as_float(total.get("tradeVolume"))
-                    if actual_trade is not None: last_price = actual_trade
-                    if actual_volume is not None: volume = actual_volume
-                    name = str(quote.get("name") or symbol); percent = as_float(quote.get("changePercent"))
-                except Exception:
-                    reference = as_float(getattr(snapshot, "reference_price", None)); percent = ((last_price / reference) - 1) * 100 if reference else None
-                if abs(last_price - target) > .0001 or volume <= min_volume: continue
-                unit = int(as_float(getattr(snapshot, "unit", None)) or 1000)
-                matches.append({"name": name, "symbol": symbol, "market": market, "last": last_price, "limit": limit_up, "ticks": ticks, "volume": int(volume), "percent": percent, "time": update_time, "unit": unit})
-            matches.sort(key=lambda row: row["volume"], reverse=True); self.events.put(("limit_scan", (matches, len(items), datetime.now().strftime("%H:%M:%S"), ticks, min_volume, category)))
+                update_time = snapshot_time(quote.get("lastUpdated"))
+                matches.append({"name": str(quote.get("name") or symbol), "symbol": symbol, "market": market, "last": last_price, "limit": limit_up, "ticks": ticks, "volume": int(volume), "percent": as_float(quote.get("changePercent")), "time": update_time, "unit": int(symbol_metadata.get("unit") or 1000)})
+            matches.sort(key=lambda row: row["volume"], reverse=True); warning = "；".join(market_errors); self.events.put(("limit_scan", (scan_serial, matches, len(quote_rows), datetime.now().strftime("%H:%M:%S"), ticks, min_volume, category, warning)))
         except Exception as exc:
-            self.events.put(("limit_scan_error", str(exc)))
+            self.events.put(("limit_scan_error", (scan_serial, str(exc))))
 
     def _chase_limit_order(self, row: dict[str, Any]) -> None:
         if not self.connected: QMessageBox.warning(self, "尚未登入", "請先登入後再送單。"); return
@@ -704,8 +743,14 @@ class MarketWindow(QMainWindow):
                 elif kind == "daily": self.daily_chart.show_candles(data[0], data[1]); self.daily_source.setText(f"富邦 historical/candles · {len(data[1])} 根日 K")
                 elif kind == "http_done": self.inventory_source.setText("HTTP 當日行情 + WebSocket aggregates"); self.footer.setText("部分 HTTP 查詢失敗，WebSocket 仍持續更新" if data else "HTTP 初始資料完成，WebSocket 持續更新")
                 elif kind == "status": self.footer.setText(str(data))
-                elif kind == "limit_scan": self.limit_scan_running = False; self.limit_scan_button.setEnabled(True); self._render_limit_monitor(*data)
-                elif kind == "limit_scan_error": self.limit_scan_running = False; self.limit_scan_button.setEnabled(True); self.limit_status.setText("掃描未完成"); self.limit_error.setText(f"程式執行失敗原因：{data}")
+                elif kind == "limit_scan":
+                    scan_serial, *payload = data
+                    if scan_serial != self.limit_scan_serial: continue
+                    self.limit_scan_running = False; self.limit_scan_started_at = None; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(True); self._render_limit_monitor(*payload)
+                elif kind == "limit_scan_error":
+                    scan_serial, message = data
+                    if scan_serial != self.limit_scan_serial: continue
+                    self.limit_scan_running = False; self.limit_scan_started_at = None; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(True); self.limit_status.setText("掃描未完成，可再次按立即掃描"); self.limit_error.setText(f"程式執行失敗原因：{message}")
                 elif kind == "order_result": self.order_button.setEnabled(True); self.limit_table.setEnabled(True); self._limit_selection_changed(); self._show_order_result(*data)
                 elif kind == "order_error":
                     self.order_button.setEnabled(True); self.limit_table.setEnabled(True); message, pending_id, mode = data; self._limit_selection_changed()
@@ -723,7 +768,7 @@ class MarketWindow(QMainWindow):
                 if column in (2, 3) and change is not None: item.setForeground(QColor("#ff667d" if change > 0 else "#35d3a3" if change < 0 else "#9aa8bf"))
                 self.table.setItem(row_index, column, item)
 
-    def _render_limit_monitor(self, rows: list[dict[str, Any]], scanned: int, updated: str, ticks: int, min_volume: int, category: str) -> None:
+    def _render_limit_monitor(self, rows: list[dict[str, Any]], scanned: int, updated: str, ticks: int, min_volume: int, category: str, warning: str = "") -> None:
         self.limit_rows_by_symbol = {str(row["symbol"]): dict(row) for row in rows}; self.limit_table.setSortingEnabled(False); self.limit_table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             percent = row.get("percent"); values = [row["name"], row["symbol"], row["market"], fmt(row["last"]), fmt(row["limit"]), f'{row.get("ticks", ticks)} tick', f'{row["volume"]:,}', "—" if percent is None else f"{percent:+.2f}%", row["time"] or updated]
@@ -732,7 +777,7 @@ class MarketWindow(QMainWindow):
                 if column in (3, 4, 7): item.setForeground(QColor("#ff667d"))
                 self.limit_table.setItem(row_index, column, item)
             chase = QPushButton("市價買進"); chase.setObjectName("chaseButton"); chase.setToolTip(f"以市價 ROD 買進 {row['symbol']}"); chase.clicked.connect(lambda checked=False, payload=dict(row): self._chase_limit_order(payload)); self.limit_table.setCellWidget(row_index, 9, chase)
-        self.limit_table.setSortingEnabled(True); self._limit_selection_changed(); self.limit_status.setText(f"{updated} 完成 · {category}掃描 {scanned:,} 檔 · 距漲停 {ticks} tick · 量 > {min_volume:,} 張 · 符合 {len(rows)} 檔 · 每 30 秒更新"); self.limit_error.setText("程式執行訊息：最近一次掃描正常，無錯誤。")
+        self.limit_table.setSortingEnabled(True); self._limit_selection_changed(); self.limit_status.setText(f"{updated} 完成 · {category}掃描 {scanned:,} 檔 · 距漲停 {ticks} tick · 量 > {min_volume:,} 張 · 符合 {len(rows)} 檔 · 每 30 秒更新"); self.limit_error.setText(f"程式執行訊息：掃描完成，但部分市場失敗：{warning}" if warning else "程式執行訊息：最近一次掃描正常，無錯誤。")
 
 
 if __name__ == "__main__":

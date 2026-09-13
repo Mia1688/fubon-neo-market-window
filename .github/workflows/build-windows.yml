@@ -50,16 +50,16 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -LiteralPath "使用手冊.md" -Destination "dist\FubonNeoMarketWindow\使用手冊.md"
-          Compress-Archive -Path "dist\FubonNeoMarketWindow" -DestinationPath "FubonNeoMarketWindow-v1.1.0-win64.zip" -CompressionLevel Optimal
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "FubonNeoMarketWindow-v1.1.0-win64.zip").Hash
-          "$hash  FubonNeoMarketWindow-v1.1.0-win64.zip" | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
+          Compress-Archive -Path "dist\FubonNeoMarketWindow" -DestinationPath "FubonNeoMarketWindow-v1.1.1-win64.zip" -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "FubonNeoMarketWindow-v1.1.1-win64.zip").Hash
+          "$hash  FubonNeoMarketWindow-v1.1.1-win64.zip" | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FubonNeoMarketWindow-v1.1.0-win64
+          name: FubonNeoMarketWindow-v1.1.1-win64
           path: |
-            FubonNeoMarketWindow-v1.1.0-win64.zip
+            FubonNeoMarketWindow-v1.1.1-win64.zip
             SHA256SUMS.txt
 
       - name: Publish GitHub release
@@ -67,9 +67,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if (gh release view "v1.1.0" --repo "$env:GITHUB_REPOSITORY" 2>$null) {
-            gh release upload "v1.1.0" "FubonNeoMarketWindow-v1.1.0-win64.zip" "SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
+          if (gh release view "v1.1.1" --repo "$env:GITHUB_REPOSITORY" 2>$null) {
+            gh release upload "v1.1.1" "FubonNeoMarketWindow-v1.1.1-win64.zip" "SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
           } else {
-            gh release create "v1.1.0" "FubonNeoMarketWindow-v1.1.0-win64.zip" "SHA256SUMS.txt" --title "看盤視窗 v1.1.0 Windows 免安裝版" --notes "下載 ZIP 並全部解壓縮後，執行 FubonNeoMarketWindow.exe。請保留 _internal 資料夾。使用正式下單前請先核對帳號、商品、方向與數量。" --repo "$env:GITHUB_REPOSITORY"
+            gh release create "v1.1.1" "FubonNeoMarketWindow-v1.1.1-win64.zip" "SHA256SUMS.txt" --title "看盤視窗 v1.1.1 Windows 免安裝版" --notes "修正盤中漲停監控立即掃描無反應：漲停價與即時行情改由正確的富邦 API 分工取得，並新增 30 秒逾時解鎖及可見錯誤訊息。下載 ZIP 並全部解壓縮後執行 FubonNeoMarketWindow.exe，請保留 _internal 資料夾。" --repo "$env:GITHUB_REPOSITORY"
           }
-

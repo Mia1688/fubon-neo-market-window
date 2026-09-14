@@ -284,14 +284,26 @@ class MarketWindow(QMainWindow):
 
     def _limit_monitor_page(self) -> QWidget:
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(0, 0, 0, 0); panel = QFrame(); panel.setObjectName("panel"); body = QVBoxLayout(panel); body.setContentsMargins(20, 18, 20, 18); top = QHBoxLayout(); heading = QVBoxLayout(); title = QLabel("漲停監控"); title.setObjectName("sectionTitle"); self.limit_rule_label = QLabel(); self.limit_rule_label.setObjectName("muted"); heading.addWidget(title); heading.addWidget(self.limit_rule_label); top.addLayout(heading); top.addStretch(); self.limit_chase_selected_button = QPushButton("市價追選取標的"); self.limit_chase_selected_button.setObjectName("chaseButton"); self.limit_chase_selected_button.setEnabled(False); self.limit_chase_selected_button.clicked.connect(self._chase_selected_limit); top.addWidget(self.limit_chase_selected_button); self.limit_scan_button = QPushButton("立即掃描"); self.limit_scan_button.clicked.connect(self.scan_limit_monitor); self.limit_scan_button.setEnabled(False); top.addWidget(self.limit_scan_button); body.addLayout(top)
-        filters = QHBoxLayout(); filters.setSpacing(8); self.limit_category = QComboBox(); self.limit_category.setObjectName("limitCategory"); self.limit_category.addItems(["全部一般股", "台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300", "上市一般股", "上櫃一般股", "ETF／ETN", "可轉債", "全部商品"]); self.limit_ticks_input = QSpinBox(); self.limit_ticks_input.setRange(1, 20); self.limit_ticks_input.setValue(1); self.limit_ticks_input.setSuffix(" tick"); self.limit_volume_input = QSpinBox(); self.limit_volume_input.setRange(0, 10_000_000); self.limit_volume_input.setValue(1000); self.limit_volume_input.setSingleStep(100); self.limit_volume_input.setSuffix(" 張"); self.limit_order_quantity = QSpinBox(); self.limit_order_quantity.setRange(1, 9_999); self.limit_order_quantity.setValue(1); self.limit_order_quantity.setSingleStep(1); self.limit_order_quantity.setSuffix(" 張")
-        for label, widget in (("股票分類", self.limit_category), ("距漲停", self.limit_ticks_input), ("成交量大於", self.limit_volume_input), ("追單數量", self.limit_order_quantity)):
+        filters = QHBoxLayout(); filters.setSpacing(8); self.limit_category = QComboBox(); self.limit_category.setObjectName("limitCategory"); self.limit_category.addItems(["全部一般股", "台灣50", "台灣中型100", "台灣50 + 中型100", "小型股300", "上市一般股", "上櫃一般股", "ETF／ETN", "可轉債", "全部商品"]); self.limit_ticks_input = QSpinBox(); self.limit_ticks_input.setRange(1, 20); self.limit_ticks_input.setValue(1); self.limit_ticks_input.setSuffix(" tick"); self.limit_volume_input = QSpinBox(); self.limit_volume_input.setRange(0, 10_000_000); self.limit_volume_input.setValue(1000); self.limit_volume_input.setSingleStep(100); self.limit_volume_input.setSuffix(" 張")
+        for label, widget in (("股票分類", self.limit_category), ("距漲停", self.limit_ticks_input), ("成交量大於", self.limit_volume_input)):
             filter_label = QLabel(label); filter_label.setObjectName("filterLabel"); filters.addWidget(filter_label); filters.addWidget(widget)
-        filters.addStretch(); body.addLayout(filters); self.limit_category.currentTextChanged.connect(self._update_limit_rule_text); self.limit_ticks_input.valueChanged.connect(self._update_limit_rule_text); self.limit_volume_input.valueChanged.connect(self._update_limit_rule_text); self._update_limit_rule_text()
+        filters.addStretch(); body.addLayout(filters)
+        sizing = QHBoxLayout(); sizing.setSpacing(8); sizing_label = QLabel("追單方式"); sizing_label.setObjectName("filterLabel"); sizing.addWidget(sizing_label); self.limit_sizing_group = QButtonGroup(self); self.limit_sizing_group.setExclusive(True)
+        for index, text in enumerate(("固定張數", "每檔本金")):
+            button = QPushButton(text); button.setObjectName("tradeOption"); button.setCheckable(True); button.setChecked(index == 0); self.limit_sizing_group.addButton(button); sizing.addWidget(button)
+        self.limit_order_quantity = QSpinBox(); self.limit_order_quantity.setRange(1, 9_999); self.limit_order_quantity.setValue(1); self.limit_order_quantity.setSingleStep(1); self.limit_order_quantity.setSuffix(" 張"); sizing.addWidget(self.limit_order_quantity); self.limit_order_capital = QSpinBox(); self.limit_order_capital.setRange(1, 10_000); self.limit_order_capital.setValue(10); self.limit_order_capital.setSingleStep(10); self.limit_order_capital.setSuffix(" 萬元"); self.limit_order_capital.setEnabled(False); sizing.addWidget(self.limit_order_capital); self.limit_sizing_hint = QLabel("每檔固定買進 1 張"); self.limit_sizing_hint.setObjectName("muted"); sizing.addWidget(self.limit_sizing_hint); sizing.addStretch(); body.addLayout(sizing)
+        self.limit_sizing_group.buttonClicked.connect(self._limit_sizing_changed); self.limit_order_quantity.valueChanged.connect(self._update_limit_sizing_hint); self.limit_order_capital.valueChanged.connect(self._update_limit_sizing_hint); self.limit_category.currentTextChanged.connect(self._update_limit_rule_text); self.limit_ticks_input.valueChanged.connect(self._update_limit_rule_text); self.limit_volume_input.valueChanged.connect(self._update_limit_rule_text); self._update_limit_rule_text()
         self.limit_table = QTableWidget(0, 10); self.limit_table.setHorizontalHeaderLabels(["商品", "代碼", "市場", "成交價", "漲停價", "距離", "成交量（張）", "漲幅", "更新時間", "操作"]); self.limit_table.verticalHeader().setVisible(False); self.limit_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.limit_table.setAlternatingRowColors(True); self.limit_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.limit_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.limit_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.limit_table.itemSelectionChanged.connect(self._limit_selection_changed); self.limit_table.setSortingEnabled(True); body.addWidget(self.limit_table, 1); self.limit_status = QLabel("登入後開始掃描；每 30 秒自動更新"); self.limit_status.setObjectName("source"); body.addWidget(self.limit_status); self.limit_error = QLabel("程式執行訊息：尚無錯誤"); self.limit_error.setObjectName("executionMessage"); self.limit_error.setWordWrap(True); self.limit_error.setMinimumHeight(52); body.addWidget(self.limit_error); layout.addWidget(panel); return page
 
     def _update_limit_rule_text(self, *_: Any) -> None:
         self.limit_rule_label.setText(f"{self.limit_category.currentText()} · 成交價距漲停 {self.limit_ticks_input.value()} tick · 成交量 > {self.limit_volume_input.value():,} 張")
+
+    def _limit_sizing_changed(self, button: QPushButton) -> None:
+        use_capital = button.text() == "每檔本金"; self.limit_order_quantity.setEnabled(not use_capital); self.limit_order_capital.setEnabled(use_capital); self._update_limit_sizing_hint()
+
+    def _update_limit_sizing_hint(self, *_: Any) -> None:
+        button = self.limit_sizing_group.checkedButton(); use_capital = button is not None and button.text() == "每檔本金"
+        self.limit_sizing_hint.setText(f"每檔投入約 {self.limit_order_capital.value():,} 萬元，依漲停價推算整張" if use_capital else f"每檔固定買進 {self.limit_order_quantity.value():,} 張")
 
     def _monitor_page(self, title: str, subtitle: str, columns: list[str]) -> QWidget:
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(0, 0, 0, 0); panel = QFrame(); panel.setObjectName("panel"); body = QVBoxLayout(panel); body.setContentsMargins(20, 18, 20, 18); heading = QLabel(title); heading.setObjectName("sectionTitle"); description = QLabel(subtitle); description.setObjectName("muted"); table = QTableWidget(0, len(columns)); table.setHorizontalHeaderLabels(columns); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); table.setAlternatingRowColors(True); empty = QLabel("登入後等待即時資料"); empty.setObjectName("emptyState"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter); body.addWidget(heading); body.addWidget(description); body.addWidget(table, 1); body.addWidget(empty); layout.addWidget(panel); return page
@@ -562,7 +574,7 @@ class MarketWindow(QMainWindow):
                     market_errors.append(f"{market_name}: {exc}")
             if not quote_rows: raise RuntimeError("上市、上櫃及創新板行情皆未取得" + (f"（{'；'.join(market_errors)}）" if market_errors else ""))
 
-            matches: list[dict[str, Any]] = []
+            matches: list[dict[str, Any]] = []; eligible_count = 0
             for market, quote in quote_rows:
                 symbol = str(quote.get("symbol", "") or ""); symbol_metadata = metadata.get(symbol, {}); limit_up = as_float(symbol_metadata.get("limit")); target = previous_stock_ticks(limit_up, ticks)
                 if allowed is not None and symbol not in allowed: continue
@@ -571,19 +583,26 @@ class MarketWindow(QMainWindow):
                 instrument_type = str(quote.get("type", "") or "").upper()
                 if category == "ETF／ETN" and instrument_type not in {"ETF", "ETN"}: continue
                 if category == "可轉債" and instrument_type not in {"CB", "CONVERTIBLE_BOND", "CONVERTIBLEBOND"}: continue
+                eligible_count += 1
                 last_price = as_float(quote.get("closePrice") if quote.get("isTrial") else quote.get("lastPrice")); last_price = last_price if last_price is not None else as_float(quote.get("closePrice")); volume = as_float(quote.get("tradeVolume"))
                 if not symbol or last_price is None or target is None or volume is None: continue
                 if abs(last_price - target) > .0001 or volume <= min_volume: continue
                 update_time = snapshot_time(quote.get("lastUpdated"))
                 matches.append({"name": str(quote.get("name") or symbol), "symbol": symbol, "market": market, "last": last_price, "limit": limit_up, "ticks": ticks, "volume": int(volume), "percent": as_float(quote.get("changePercent")), "time": update_time, "unit": int(symbol_metadata.get("unit") or 1000)})
-            matches.sort(key=lambda row: row["volume"], reverse=True); warning = "；".join(market_errors); self.events.put(("limit_scan", (scan_serial, matches, len(quote_rows), datetime.now().strftime("%H:%M:%S"), ticks, min_volume, category, warning)))
+            matches.sort(key=lambda row: row["volume"], reverse=True); warning = "；".join(market_errors); self.events.put(("limit_scan", (scan_serial, matches, eligible_count, datetime.now().strftime("%H:%M:%S"), ticks, min_volume, category, warning)))
         except Exception as exc:
             self.events.put(("limit_scan_error", (scan_serial, str(exc))))
 
     def _chase_limit_order(self, row: dict[str, Any]) -> None:
         if not self.connected: QMessageBox.warning(self, "尚未登入", "請先登入後再送單。"); return
-        symbol, lots = str(row.get("symbol", "")), self.limit_order_quantity.value(); unit = int(row.get("unit") or 1000); quantity = lots * unit
-        warning = f"商品：{row.get('name', symbol)} ({symbol})\n方向：買進\n價格：市價 ROD\n數量：{lots:,} 張（{quantity:,} 股／單位）\n目前成交：{fmt(row.get('last'))}\n漲停價：{fmt(row.get('limit'))}\n\n市價單不保證成交價格，若漲停打開可能以其他價格成交。確定送出？"
+        symbol = str(row.get("symbol", "")); unit = int(row.get("unit") or 1000); sizing_button = self.limit_sizing_group.checkedButton(); use_capital = sizing_button is not None and sizing_button.text() == "每檔本金"; limit_price = as_float(row.get("limit")); capital = self.limit_order_capital.value() * 10_000 if use_capital else None
+        if use_capital:
+            if limit_price is None or limit_price <= 0: QMessageBox.warning(self, "無法推算張數", "目前沒有有效漲停價，無法使用每檔本金推算張數。"); return
+            one_lot_value = limit_price * unit; lots = min(9_999, int(capital // one_lot_value))
+            if lots < 1: QMessageBox.warning(self, "本金不足一張", f"每檔本金 {capital:,.0f} 元不足以漲停價 {limit_price:,.2f} 元買進一張。\n一張約需 {one_lot_value:,.0f} 元（未含手續費）。"); return
+        else: lots = self.limit_order_quantity.value()
+        quantity = lots * unit; estimated_value = (limit_price or as_float(row.get("last")) or 0) * quantity; sizing_text = f"每檔本金：{capital:,.0f} 元\n推算方式：本金 ÷（漲停價 × 每張單位），只取整張\n" if use_capital else ""
+        warning = f"商品：{row.get('name', symbol)} ({symbol})\n方向：買進\n價格：市價 ROD\n{sizing_text}數量：{lots:,} 張（{quantity:,} 股／單位）\n漲停價估算金額：{estimated_value:,.0f} 元（未含手續費）\n目前成交：{fmt(row.get('last'))}\n漲停價：{fmt(row.get('limit'))}\n\n市價單不保證成交價格，若漲停打開可能以其他價格成交。確定送出？"
         if QMessageBox.question(self, "市價追漲停確認", warning, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes: return
         self.limit_error.setText(f"程式執行訊息：正在送出 {symbol} 市價買進 {lots:,} 張……"); self.limit_table.setEnabled(False); self.limit_chase_selected_button.setEnabled(False); threading.Thread(target=self._order_worker, args=("股票現股", symbol, "買進", "市價", "", quantity, "追漲停", None), daemon=True).start()
 
@@ -777,7 +796,7 @@ class MarketWindow(QMainWindow):
                 if column in (3, 4, 7): item.setForeground(QColor("#ff667d"))
                 self.limit_table.setItem(row_index, column, item)
             chase = QPushButton("市價買進"); chase.setObjectName("chaseButton"); chase.setToolTip(f"以市價 ROD 買進 {row['symbol']}"); chase.clicked.connect(lambda checked=False, payload=dict(row): self._chase_limit_order(payload)); self.limit_table.setCellWidget(row_index, 9, chase)
-        self.limit_table.setSortingEnabled(True); self._limit_selection_changed(); self.limit_status.setText(f"{updated} 完成 · {category}掃描 {scanned:,} 檔 · 距漲停 {ticks} tick · 量 > {min_volume:,} 張 · 符合 {len(rows)} 檔 · 每 30 秒更新"); self.limit_error.setText(f"程式執行訊息：掃描完成，但部分市場失敗：{warning}" if warning else "程式執行訊息：最近一次掃描正常，無錯誤。")
+        self.limit_table.setSortingEnabled(True); self._limit_selection_changed(); self.limit_status.setText(f"{updated} 完成 · {category}分類內 {scanned:,} 檔 · 距漲停 {ticks} tick · 量 > {min_volume:,} 張 · 符合 {len(rows)} 檔 · 每 30 秒更新"); self.limit_error.setText(f"程式執行訊息：掃描完成，但部分市場失敗：{warning}" if warning else "程式執行訊息：最近一次掃描正常，無錯誤。")
 
 
 if __name__ == "__main__":

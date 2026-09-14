@@ -6,7 +6,7 @@
 
 ## Windows 免安裝版
 
-不需 Python、不需執行 BAT。請到 [GitHub Releases](https://github.com/Mia1688/fubon-neo-market-window/releases/latest) 下載 `FubonNeoMarketWindow-v1.1.2-win64.zip`，全部解壓縮後執行 `FubonNeoMarketWindow.exe`。請保留 EXE 旁的 `_internal` 資料夾。
+不需 Python、不需執行 BAT。請到 [GitHub Releases](https://github.com/Mia1688/fubon-neo-market-window/releases/latest) 下載 `FubonNeoMarketWindow-v1.1.3-win64.zip`，全部解壓縮後執行 `FubonNeoMarketWindow.exe`。請保留 EXE 旁的 `_internal` 資料夾。
 
 ## 畫面配置
 
@@ -31,6 +31,8 @@
 按「立即掃描」後，狀態列會立即顯示掃描進度；重複按下會顯示目前等待秒數。若富邦或公司網路超過 30 秒未回應，按鈕會自動恢復，失敗原因會保留在下方，不會再無聲卡住。
 
 狀態列的掃描檔數是分類後的標的數，例如「台灣50」會顯示分類內約 50 檔，不再顯示富邦全市場快照的 1,900 多檔下載總數。
+
+監控畫面分成可拖曳的上下兩層：上半部是最近 100 次掃描執行紀錄，顯示執行中／完成／部分完成／失敗／逾時、分類檔數、符合檔數及當次條件；下半部是具有固定捲軸的符合條件標的。即使結果為 0 檔，也會明確顯示本次掃描已完成，不再呈現無法判斷的空白表格。
 
 股票分類可選全部一般股、上市、上櫃、ETF／ETN、可轉債，以及台灣50、台灣中型100、台灣50＋中型100、小型股300。台灣50與中型100取自元大0050／0051官方每日PCF；小型股300依證交所編製規則，以官方發行股數和富邦參考價計算上市市值第151～450名。分類每日更新一次並快取於 `stock_groups.json`。
 

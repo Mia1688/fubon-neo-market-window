@@ -50,16 +50,16 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -LiteralPath "使用手冊.md" -Destination "dist\FubonNeoMarketWindow\使用手冊.md"
-          Compress-Archive -Path "dist\FubonNeoMarketWindow" -DestinationPath "FubonNeoMarketWindow-v1.1.2-win64.zip" -CompressionLevel Optimal
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "FubonNeoMarketWindow-v1.1.2-win64.zip").Hash
-          "$hash  FubonNeoMarketWindow-v1.1.2-win64.zip" | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
+          Compress-Archive -Path "dist\FubonNeoMarketWindow" -DestinationPath "FubonNeoMarketWindow-v1.1.3-win64.zip" -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "FubonNeoMarketWindow-v1.1.3-win64.zip").Hash
+          "$hash  FubonNeoMarketWindow-v1.1.3-win64.zip" | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FubonNeoMarketWindow-v1.1.2-win64
+          name: FubonNeoMarketWindow-v1.1.3-win64
           path: |
-            FubonNeoMarketWindow-v1.1.2-win64.zip
+            FubonNeoMarketWindow-v1.1.3-win64.zip
             SHA256SUMS.txt
 
       - name: Publish GitHub release
@@ -67,8 +67,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if (gh release view "v1.1.2" --repo "$env:GITHUB_REPOSITORY" 2>$null) {
-            gh release upload "v1.1.2" "FubonNeoMarketWindow-v1.1.2-win64.zip" "SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
+          if (gh release view "v1.1.3" --repo "$env:GITHUB_REPOSITORY" 2>$null) {
+            gh release upload "v1.1.3" "FubonNeoMarketWindow-v1.1.3-win64.zip" "SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
           } else {
-            gh release create "v1.1.2" "FubonNeoMarketWindow-v1.1.2-win64.zip" "SHA256SUMS.txt" --title "看盤視窗 v1.1.2 Windows 免安裝版" --notes "修正台灣50等分類顯示全市場1,971檔的問題，狀態列改顯示分類內實際檔數；新增固定張數／每檔本金兩種追單方式，可輸入10萬、20萬元並依漲停價推算整張數量。下載 ZIP 並全部解壓縮後執行 FubonNeoMarketWindow.exe，請保留 _internal 資料夾。" --repo "$env:GITHUB_REPOSITORY"
+            gh release create "v1.1.3" "FubonNeoMarketWindow-v1.1.3-win64.zip" "SHA256SUMS.txt" --title "看盤視窗 v1.1.3 Windows 免安裝版" --notes "漲停監控改成上下兩層：上半部保留最近100次掃描執行紀錄，下半部以捲軸顯示符合條件標的；即使0檔符合也會明確顯示已完成，不再只看到空白。下載 ZIP 並全部解壓縮後執行 FubonNeoMarketWindow.exe，請保留 _internal 資料夾。" --repo "$env:GITHUB_REPOSITORY"
           }

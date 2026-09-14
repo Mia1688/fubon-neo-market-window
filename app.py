@@ -293,7 +293,13 @@ class MarketWindow(QMainWindow):
             button = QPushButton(text); button.setObjectName("tradeOption"); button.setCheckable(True); button.setChecked(index == 0); self.limit_sizing_group.addButton(button); sizing.addWidget(button)
         self.limit_order_quantity = QSpinBox(); self.limit_order_quantity.setRange(1, 9_999); self.limit_order_quantity.setValue(1); self.limit_order_quantity.setSingleStep(1); self.limit_order_quantity.setSuffix(" 張"); sizing.addWidget(self.limit_order_quantity); self.limit_order_capital = QSpinBox(); self.limit_order_capital.setRange(1, 10_000); self.limit_order_capital.setValue(10); self.limit_order_capital.setSingleStep(10); self.limit_order_capital.setSuffix(" 萬元"); self.limit_order_capital.setEnabled(False); sizing.addWidget(self.limit_order_capital); self.limit_sizing_hint = QLabel("每檔固定買進 1 張"); self.limit_sizing_hint.setObjectName("muted"); sizing.addWidget(self.limit_sizing_hint); sizing.addStretch(); body.addLayout(sizing)
         self.limit_sizing_group.buttonClicked.connect(self._limit_sizing_changed); self.limit_order_quantity.valueChanged.connect(self._update_limit_sizing_hint); self.limit_order_capital.valueChanged.connect(self._update_limit_sizing_hint); self.limit_category.currentTextChanged.connect(self._update_limit_rule_text); self.limit_ticks_input.valueChanged.connect(self._update_limit_rule_text); self.limit_volume_input.valueChanged.connect(self._update_limit_rule_text); self._update_limit_rule_text()
-        self.limit_table = QTableWidget(0, 10); self.limit_table.setHorizontalHeaderLabels(["商品", "代碼", "市場", "成交價", "漲停價", "距離", "成交量（張）", "漲幅", "更新時間", "操作"]); self.limit_table.verticalHeader().setVisible(False); self.limit_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.limit_table.setAlternatingRowColors(True); self.limit_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.limit_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.limit_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.limit_table.itemSelectionChanged.connect(self._limit_selection_changed); self.limit_table.setSortingEnabled(True); body.addWidget(self.limit_table, 1); self.limit_status = QLabel("登入後開始掃描；每 30 秒自動更新"); self.limit_status.setObjectName("source"); body.addWidget(self.limit_status); self.limit_error = QLabel("程式執行訊息：尚無錯誤"); self.limit_error.setObjectName("executionMessage"); self.limit_error.setWordWrap(True); self.limit_error.setMinimumHeight(52); body.addWidget(self.limit_error); layout.addWidget(panel); return page
+        self.limit_monitor_splitter = QSplitter(Qt.Orientation.Vertical); self.limit_monitor_splitter.setObjectName("panelSplitter"); self.limit_monitor_splitter.setChildrenCollapsible(False)
+        history_panel = QFrame(); history_panel.setObjectName("monitorSection"); history_layout = QVBoxLayout(history_panel); history_layout.setContentsMargins(10, 8, 10, 10); history_header = QHBoxLayout(); history_title = QLabel("掃描執行紀錄"); history_title.setObjectName("monitorHeading"); history_header.addWidget(history_title); history_header.addStretch(); history_tip = QLabel("最新一次在最上方 · 保留最近 100 次"); history_tip.setObjectName("muted"); history_header.addWidget(history_tip); history_layout.addLayout(history_header)
+        self.limit_history_table = QTableWidget(0, 6); self.limit_history_table.setHorizontalHeaderLabels(["開始時間", "分類", "分類檔數", "符合", "掃描條件", "執行結果"]); self.limit_history_table.verticalHeader().setVisible(False); self.limit_history_table.setAlternatingRowColors(True); self.limit_history_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.limit_history_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection); self.limit_history_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn); history_header_view = self.limit_history_table.horizontalHeader(); history_header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents); history_header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents); history_header_view.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents); history_header_view.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents); history_header_view.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch); history_header_view.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents); history_layout.addWidget(self.limit_history_table)
+        result_panel = QFrame(); result_panel.setObjectName("monitorSection"); result_layout = QVBoxLayout(result_panel); result_layout.setContentsMargins(10, 8, 10, 10); result_header = QHBoxLayout(); result_title = QLabel("符合條件標的"); result_title.setObjectName("monitorHeading"); result_header.addWidget(result_title); result_header.addStretch(); self.limit_result_count = QLabel("尚未掃描"); self.limit_result_count.setObjectName("badge"); result_header.addWidget(self.limit_result_count); result_layout.addLayout(result_header)
+        self.limit_table = QTableWidget(0, 10); self.limit_table.setHorizontalHeaderLabels(["商品", "代碼", "市場", "成交價", "漲停價", "距離", "成交量（張）", "漲幅", "更新時間", "操作"]); self.limit_table.verticalHeader().setVisible(False); self.limit_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.limit_table.setAlternatingRowColors(True); self.limit_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.limit_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.limit_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); self.limit_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn); self.limit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded); self.limit_table.itemSelectionChanged.connect(self._limit_selection_changed); self.limit_table.setSortingEnabled(True); result_layout.addWidget(self.limit_table, 1); self.limit_result_empty = QLabel("尚未執行掃描；登入後按「立即掃描」"); self.limit_result_empty.setObjectName("emptyState"); self.limit_result_empty.setAlignment(Qt.AlignmentFlag.AlignCenter); result_layout.addWidget(self.limit_result_empty)
+        self.limit_monitor_splitter.addWidget(history_panel); self.limit_monitor_splitter.addWidget(result_panel); self.limit_monitor_splitter.setStretchFactor(0, 1); self.limit_monitor_splitter.setStretchFactor(1, 2); self.limit_monitor_splitter.setSizes([190, 380]); body.addWidget(self.limit_monitor_splitter, 1)
+        self.limit_status = QLabel("登入後開始掃描；每 30 秒自動更新"); self.limit_status.setObjectName("source"); body.addWidget(self.limit_status); self.limit_error = QLabel("程式執行訊息：尚無錯誤"); self.limit_error.setObjectName("executionMessage"); self.limit_error.setWordWrap(True); self.limit_error.setMinimumHeight(52); body.addWidget(self.limit_error); layout.addWidget(panel); return page
 
     def _update_limit_rule_text(self, *_: Any) -> None:
         self.limit_rule_label.setText(f"{self.limit_category.currentText()} · 成交價距漲停 {self.limit_ticks_input.value()} tick · 成交量 > {self.limit_volume_input.value():,} 張")
@@ -304,6 +310,25 @@ class MarketWindow(QMainWindow):
     def _update_limit_sizing_hint(self, *_: Any) -> None:
         button = self.limit_sizing_group.checkedButton(); use_capital = button is not None and button.text() == "每檔本金"
         self.limit_sizing_hint.setText(f"每檔投入約 {self.limit_order_capital.value():,} 萬元，依漲停價推算整張" if use_capital else f"每檔固定買進 {self.limit_order_quantity.value():,} 張")
+
+    def _begin_limit_history(self, scan_serial: int, category: str, ticks: int, min_volume: int) -> None:
+        self.limit_history_table.insertRow(0); values = [datetime.now().strftime("%H:%M:%S"), category, "—", "—", f"距漲停 {ticks} tick／量 > {min_volume:,} 張", "執行中"]
+        for column, value in enumerate(values):
+            item = QTableWidgetItem(value); item.setTextAlignment(Qt.AlignmentFlag.AlignCenter if column != 4 else Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            if column == 0: item.setData(Qt.ItemDataRole.UserRole, scan_serial)
+            if column == 5: item.setForeground(QColor("#8fb2ff"))
+            self.limit_history_table.setItem(0, column, item)
+        while self.limit_history_table.rowCount() > 100: self.limit_history_table.removeRow(self.limit_history_table.rowCount() - 1)
+
+    def _finish_limit_history(self, scan_serial: int, scanned: int | None, matched: int | None, result: str) -> None:
+        for row_index in range(self.limit_history_table.rowCount()):
+            first = self.limit_history_table.item(row_index, 0)
+            if first is None or first.data(Qt.ItemDataRole.UserRole) != scan_serial: continue
+            for column, value in ((2, "—" if scanned is None else f"{scanned:,}"), (3, "—" if matched is None else f"{matched:,}"), (5, result)):
+                item = self.limit_history_table.item(row_index, column) or QTableWidgetItem(); item.setText(value); item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if column == 5: item.setForeground(QColor("#35d3a3" if result == "完成" else "#ffb35c" if result == "部分完成" else "#ff667d"))
+                self.limit_history_table.setItem(row_index, column, item)
+            return
 
     def _monitor_page(self, title: str, subtitle: str, columns: list[str]) -> QWidget:
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(0, 0, 0, 0); panel = QFrame(); panel.setObjectName("panel"); body = QVBoxLayout(panel); body.setContentsMargins(20, 18, 20, 18); heading = QLabel(title); heading.setObjectName("sectionTitle"); description = QLabel(subtitle); description.setObjectName("muted"); table = QTableWidget(0, len(columns)); table.setHorizontalHeaderLabels(columns); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); table.setAlternatingRowColors(True); empty = QLabel("登入後等待即時資料"); empty.setObjectName("emptyState"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter); body.addWidget(heading); body.addWidget(description); body.addWidget(table, 1); body.addWidget(empty); layout.addWidget(panel); return page
@@ -351,7 +376,7 @@ class MarketWindow(QMainWindow):
     def _theme(self) -> None:
         self.setStyleSheet("""
         QWidget#root{background:#070b16;color:#e8eef9;font-family:'Microsoft JhengHei','Segoe UI';font-size:10pt} QLabel#brand{font-size:25pt;font-weight:800;color:#f7f9ff} QLabel#muted{color:#7f8da8} QLabel#eyebrow{color:#6f8bb8;font-size:8pt;font-weight:700} QLabel#filterLabel{color:#ffffff;font-weight:700} QLabel#sectionTitle{font-size:15pt;font-weight:700;color:#edf3ff} QLabel#heroPrice{font-size:34pt;font-weight:800;color:#f8fbff} QLabel#upChange{color:#ff667d;font-size:13pt;font-weight:700} QLabel#downChange{color:#35d3a3;font-size:13pt;font-weight:700} QLabel#flatChange{color:#8b99b2;font-size:13pt;font-weight:700} QLabel#source{color:#65738d;font-size:9pt} QLabel#executionMessage{background:#160f19;color:#ffb0bf;border:1px solid #633142;border-radius:7px;padding:9px 11px;font-weight:600} QLabel#badge{background:#1b2b4a;color:#8fb2ff;padding:5px 10px;border-radius:6px;font-weight:700} QLabel#offlineDot{color:#58657a} QLabel#onlineDot{color:#35d3a3}
-        QFrame#loginBar,QFrame#panel,QFrame#orderPanel,QTabWidget#marketTabs::pane{background:#101828;border:1px solid #22314d;border-radius:11px} QTabWidget#orderTabs::pane{background:#101828;border:0;border-top:1px solid #22314d} QTabBar::tab{background:#0c1423;color:#7f91ad;padding:9px 22px;border:1px solid #22314d} QTabBar::tab:selected{background:#1a2b49;color:#ddebff;border-bottom:2px solid #4d7ff3}
+        QFrame#loginBar,QFrame#panel,QFrame#orderPanel,QTabWidget#marketTabs::pane{background:#101828;border:1px solid #22314d;border-radius:11px} QFrame#monitorSection{background:#0b1322;border:1px solid #22314d;border-radius:8px} QLabel#monitorHeading{color:#edf3ff;font-size:11pt;font-weight:700} QTabWidget#orderTabs::pane{background:#101828;border:0;border-top:1px solid #22314d} QTabBar::tab{background:#0c1423;color:#7f91ad;padding:9px 22px;border:1px solid #22314d} QTabBar::tab:selected{background:#1a2b49;color:#ddebff;border-bottom:2px solid #4d7ff3}
         QFrame#sidebar{background:#0c1322;border:1px solid #22314d;border-radius:11px} QPushButton#navButton{background:transparent;color:#8999b4;border:0;border-radius:7px;text-align:left;padding:10px 13px} QPushButton#navButton:hover{background:#14213a;color:#dbe8ff} QPushButton#navButton:checked{background:#1c3156;color:#ffffff;border-left:3px solid #4d7ff3} QLabel#emptyState{color:#61708b;padding:14px}
         QFrame#orderPanel QLabel{color:#ffffff} QFrame#orderPanel QLineEdit,QFrame#orderPanel QSpinBox{color:#ffffff} QWidget#choiceRow{background:transparent}
         QPushButton#tradeOption{background:#16243c;color:#dce8fa;border:1px solid #2b3e60} QPushButton#tradeOption:checked{background:#315fae;color:#ffffff;border:1px solid #6b9aff}
@@ -510,12 +535,15 @@ class MarketWindow(QMainWindow):
             return
         ticks, min_volume, category = self.limit_ticks_input.value(), self.limit_volume_input.value(), self.limit_category.currentText()
         self.limit_scan_running = True; self.limit_scan_started_at = datetime.now(); self.limit_scan_serial += 1; scan_serial = self.limit_scan_serial; self.limit_scan_button.setText("掃描中…"); self.limit_status.setText(f"正在掃描：{category} · 距漲停 {ticks} tick · 量 > {min_volume:,} 張…"); self.limit_error.setText("程式執行訊息：正在取得上市、上櫃及創新板盤中行情。")
+        self._begin_limit_history(scan_serial, category, ticks, min_volume); self.limit_result_count.setText("掃描中…"); self.limit_result_empty.setText("正在取得行情並套用篩選條件…"); self.limit_result_empty.setVisible(True)
         QTimer.singleShot(30_000, lambda serial=scan_serial: self._limit_scan_timeout(serial))
         threading.Thread(target=self._limit_scan_worker, args=(scan_serial, ticks, min_volume, category), daemon=True).start()
 
     def _limit_scan_timeout(self, scan_serial: int) -> None:
         if not self.limit_scan_running or scan_serial != self.limit_scan_serial: return
+        self._finish_limit_history(scan_serial, None, None, "逾時")
         self.limit_scan_running = False; self.limit_scan_serial += 1; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(self.connected); self.limit_status.setText("掃描逾時，可再次按立即掃描")
+        self.limit_result_count.setText("掃描逾時"); self.limit_result_empty.setText("本次掃描逾時，請查看下方失敗原因後重試"); self.limit_result_empty.setVisible(True)
         self.limit_error.setText("程式執行失敗原因：等待富邦全市場行情超過 30 秒。請確認公司網路／防火牆可連線富邦行情服務後重試。")
 
     def _index_groups(self, items: list[Any]) -> dict[str, set[str]]:
@@ -765,11 +793,14 @@ class MarketWindow(QMainWindow):
                 elif kind == "limit_scan":
                     scan_serial, *payload = data
                     if scan_serial != self.limit_scan_serial: continue
+                    self._finish_limit_history(scan_serial, payload[1], len(payload[0]), "部分完成" if payload[-1] else "完成")
                     self.limit_scan_running = False; self.limit_scan_started_at = None; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(True); self._render_limit_monitor(*payload)
                 elif kind == "limit_scan_error":
                     scan_serial, message = data
                     if scan_serial != self.limit_scan_serial: continue
+                    self._finish_limit_history(scan_serial, None, None, "失敗")
                     self.limit_scan_running = False; self.limit_scan_started_at = None; self.limit_scan_button.setText("立即掃描"); self.limit_scan_button.setEnabled(True); self.limit_status.setText("掃描未完成，可再次按立即掃描"); self.limit_error.setText(f"程式執行失敗原因：{message}")
+                    self.limit_result_count.setText("掃描失敗"); self.limit_result_empty.setText("本次掃描失敗，請查看下方完整原因"); self.limit_result_empty.setVisible(True)
                 elif kind == "order_result": self.order_button.setEnabled(True); self.limit_table.setEnabled(True); self._limit_selection_changed(); self._show_order_result(*data)
                 elif kind == "order_error":
                     self.order_button.setEnabled(True); self.limit_table.setEnabled(True); message, pending_id, mode = data; self._limit_selection_changed()
@@ -789,6 +820,7 @@ class MarketWindow(QMainWindow):
 
     def _render_limit_monitor(self, rows: list[dict[str, Any]], scanned: int, updated: str, ticks: int, min_volume: int, category: str, warning: str = "") -> None:
         self.limit_rows_by_symbol = {str(row["symbol"]): dict(row) for row in rows}; self.limit_table.setSortingEnabled(False); self.limit_table.setRowCount(len(rows))
+        self.limit_result_count.setText(f"符合 {len(rows):,} 檔"); self.limit_result_empty.setText(f"掃描已完成：{category}分類內 {scanned:,} 檔，本次 0 檔符合條件"); self.limit_result_empty.setVisible(not rows)
         for row_index, row in enumerate(rows):
             percent = row.get("percent"); values = [row["name"], row["symbol"], row["market"], fmt(row["last"]), fmt(row["limit"]), f'{row.get("ticks", ticks)} tick', f'{row["volume"]:,}', "—" if percent is None else f"{percent:+.2f}%", row["time"] or updated]
             for column, value in enumerate(values):
